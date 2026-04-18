@@ -1,0 +1,29 @@
+services:
+  ros2:
+    build:
+      context: ./src/robot
+      dockerfile: Dockerfile
+    container_name: ros2_bridge
+    ports:
+      - "9090:9090"
+    environment:
+      - ROS_DOMAIN_ID=0
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./src/frontend
+      dockerfile: Dockerfile
+    container_name: vla_frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./src/frontend:/app
+      # prevent overwriting container's node_modules with local empty folder
+      - /app/node_modules
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+      - VITE_ROSBRIDGE_URL=ws://localhost:9090
+    depends_on:
+      - ros2
+    restart: unless-stopped
