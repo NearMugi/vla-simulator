@@ -1,0 +1,247 @@
+<?xml version="1.0"?>
+<robot name="dummy_arm">
+  <!-- Material Definitions -->
+  <material name="gray">
+    <color rgba="0.6 0.6 0.6 1.0"/>
+  </material>
+  <material name="blue">
+    <color rgba="0.2 0.5 0.8 1.0"/>
+  </material>
+  <material name="dark">
+    <color rgba="0.2 0.2 0.2 1.0"/>
+  </material>
+  <material name="red">
+    <color rgba="0.8 0.1 0.1 1.0"/>
+  </material>
+
+  <!-- Base Link -->
+  <link name="base_link">
+    <visual>
+      <geometry>
+        <cylinder radius="0.12" length="0.05"/>
+      </geometry>
+      <origin xyz="0 0 0.025" rpy="0 0 0"/>
+      <material name="dark"/>
+    </visual>
+  </link>
+
+  <!-- Link 1 (Shoulder Pan) -->
+  <link name="link1">
+    <visual>
+      <geometry>
+        <sphere radius="0.09"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <material name="gray"/>
+    </visual>
+    <visual>
+      <geometry>
+        <cylinder radius="0.07" length="0.15"/>
+      </geometry>
+      <origin xyz="0 0 0.075" rpy="0 0 0"/>
+      <material name="blue"/>
+    </visual>
+  </link>
+  <joint name="joint1" type="revolute">
+    <parent link="base_link"/>
+    <child link="link1"/>
+    <origin xyz="0 0 0.05" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-3.14" upper="3.14" effort="10.0" velocity="1.0"/>
+  </joint>
+
+  <!-- Link 2 (Shoulder Lift) -->
+  <link name="link2">
+    <visual>
+      <geometry>
+        <sphere radius="0.08"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <material name="dark"/>
+    </visual>
+    <visual>
+      <geometry>
+        <cylinder radius="0.06" length="0.3"/>
+      </geometry>
+      <origin xyz="0 0 0.15" rpy="0 0 0"/>
+      <material name="gray"/>
+    </visual>
+  </link>
+  <joint name="joint2" type="revolute">
+    <parent link="link1"/>
+    <child link="link2"/>
+    <origin xyz="0 0 0.15" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-3.14" upper="3.14" effort="10.0" velocity="1.0"/>
+  </joint>
+
+  <!-- Link 3 (Elbow) -->
+  <link name="link3">
+    <visual>
+      <geometry>
+        <sphere radius="0.07"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <material name="dark"/>
+    </visual>
+    <visual>
+      <geometry>
+        <cylinder radius="0.05" length="0.25"/>
+      </geometry>
+      <origin xyz="0 0 0.125" rpy="0 0 0"/>
+      <material name="blue"/>
+    </visual>
+  </link>
+  <joint name="joint3" type="revolute">
+    <parent link="link2"/>
+    <child link="link3"/>
+    <origin xyz="0 0 0.3" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-3.14" upper="3.14" effort="10.0" velocity="1.0"/>
+  </joint>
+
+  <!-- Link 4 (Wrist 1) -->
+  <link name="link4">
+    <visual>
+      <geometry>
+        <sphere radius="0.06"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <material name="dark"/>
+    </visual>
+    <visual>
+      <geometry>
+        <box size="0.06 0.08 0.08"/>
+      </geometry>
+      <origin xyz="0 0 0.04" rpy="0 0 0"/>
+      <material name="gray"/>
+    </visual>
+  </link>
+  <joint name="joint4" type="revolute">
+    <parent link="link3"/>
+    <child link="link4"/>
+    <origin xyz="0 0 0.25" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-3.14" upper="3.14" effort="10.0" velocity="1.0"/>
+  </joint>
+
+  <!-- Link 5 (Wrist 2) -->
+  <link name="link5">
+    <visual>
+      <geometry>
+        <sphere radius="0.05"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <material name="dark"/>
+    </visual>
+    <visual>
+      <geometry>
+        <cylinder radius="0.04" length="0.08"/>
+      </geometry>
+      <origin xyz="0 0.04 0" rpy="1.5708 0 0"/>
+      <material name="blue"/>
+    </visual>
+  </link>
+  <joint name="joint5" type="revolute">
+    <parent link="link4"/>
+    <child link="link5"/>
+    <origin xyz="0 0 0.08" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-3.14" upper="3.14" effort="10.0" velocity="1.0"/>
+  </joint>
+
+  <!-- Link 6 (Wrist 3) -->
+  <link name="link6">
+    <visual>
+      <geometry>
+        <sphere radius="0.04"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <material name="gray"/>
+    </visual>
+    <visual>
+      <geometry>
+        <box size="0.03 0.1 0.03"/>
+      </geometry>
+      <origin xyz="0 0.05 0" rpy="0 0 0"/>
+      <material name="dark"/>
+    </visual>
+  </link>
+  <joint name="joint6" type="revolute">
+    <parent link="link5"/>
+    <child link="link6"/>
+    <origin xyz="0 0.08 0" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-3.14" upper="3.14" effort="10.0" velocity="1.0"/>
+  </joint>
+
+  <!-- =============================== -->
+  <!-- GRIPPER (End Effector)          -->
+  <!-- =============================== -->
+
+  <!-- Gripper Base -->
+  <link name="gripper_base">
+    <visual>
+      <!-- Base plate of the gripper -->
+      <geometry>
+        <box size="0.12 0.02 0.04"/>
+      </geometry>
+      <origin xyz="0 0.01 0" rpy="0 0 0"/>
+      <material name="red"/>
+    </visual>
+  </link>
+  <!-- Fixed joint attaching gripper to the end of link6 -->
+  <joint name="gripper_base_joint" type="fixed">
+    <parent link="link6"/>
+    <child link="gripper_base"/>
+    <origin xyz="0 0.1 0" rpy="0 0 0"/> 
+  </joint>
+
+  <!-- Left Finger -->
+  <link name="left_finger">
+    <visual>
+      <geometry>
+        <box size="0.01 0.06 0.03"/>
+      </geometry>
+      <!-- Finger starts at Y=0 extends to Y=0.06 -->
+      <origin xyz="0 0.03 0" rpy="0 0 0"/>
+      <material name="gray"/>
+    </visual>
+  </link>
+  <joint name="left_finger_joint" type="prismatic">
+    <parent link="gripper_base"/>
+    <child link="left_finger"/>
+    <!-- Positioned on the left side (-X) and extending forward (+Y) -->
+    <origin xyz="-0.05 0.02 0" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/> <!-- Closes inward (+X) -->
+    <limit lower="0.0" upper="0.04" effort="100.0" velocity="1.0"/>
+  </joint>
+
+  <!-- Right Finger -->
+  <link name="right_finger">
+    <visual>
+      <geometry>
+        <box size="0.01 0.06 0.03"/>
+      </geometry>
+      <origin xyz="0 0.03 0" rpy="0 0 0"/>
+      <material name="gray"/>
+    </visual>
+  </link>
+  <joint name="right_finger_joint" type="prismatic">
+    <parent link="gripper_base"/>
+    <child link="right_finger"/>
+    <!-- Positioned on the right side (+X) and extending forward (+Y) -->
+    <origin xyz="0.05 0.02 0" rpy="0 0 0"/>
+    <axis xyz="-1 0 0"/> <!-- Closes inward (-X) -->
+    <limit lower="0.0" upper="0.04" effort="100.0" velocity="1.0"/>
+  </joint>
+
+  <!-- Tool Center Point (TCP) - Invisible reference frame between the fingers -->
+  <link name="tcp_link"/>
+  <joint name="tcp_joint" type="fixed">
+    <parent link="gripper_base"/>
+    <child link="tcp_link"/>
+    <origin xyz="0 0.07 0" rpy="0 0 0"/>
+  </joint>
+
+</robot>
