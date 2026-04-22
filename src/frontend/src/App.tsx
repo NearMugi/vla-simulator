@@ -2,12 +2,12 @@ import { useRos } from './hooks/useRos';
 import { SimulatorScene } from './components/SimulatorScene';
 
 function App() {
-  const { isConnected, sendDummyPose } = useRos();
+  const { isConnected, sendDummyPose, jointStates } = useRos();
 
   return (
     <>
       {/* 3Dシミュレータ画面（全画面） */}
-      <SimulatorScene />
+      <SimulatorScene jointStates={jointStates} />
 
       {/* コントロールUI（オーバーレイ） */}
       <div className="ui-overlay">

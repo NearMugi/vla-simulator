@@ -35,6 +35,30 @@ export function useRos() {
     };
   }, []);
 
+  const [jointStates, setJointStates] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    if (!rosRef.current || !isConnected) return;
+
+    const jointStateTopic = new ROSLIB.Topic({
+      ros: rosRef.current,
+      name: '/joint_states',
+      messageType: 'sensor_msgs/JointState'
+    });
+
+    jointStateTopic.subscribe((message: any) => {
+      const newStates: Record<string, number> = {};
+      message.name.forEach((name: string, index: number) => {
+        newStates[name] = message.position[index];
+      });
+      setJointStates(newStates);
+    });
+
+    return () => {
+      jointStateTopic.unsubscribe();
+    };
+  }, [isConnected]);
+
   const sendDummyPose = () => {
     if (!rosRef.current || !isConnected) return;
 
@@ -54,7 +78,7 @@ export function useRos() {
         frame_id: 'base_link'
       },
       pose: {
-        position: { x: 0.5, y: 0.0, z: 0.3 },
+        position: { x: 0.3, y: 0.3, z: 0.4 }, // 少し位置を変える
         orientation: { x: 0.0, y: 0.0, z: 0.0, w: 1.0 }
       }
     });
@@ -63,5 +87,5 @@ export function useRos() {
     console.log('Published dummy pose:', message);
   };
 
-  return { isConnected, sendDummyPose };
+  return { isConnected, sendDummyPose, jointStates };
 }

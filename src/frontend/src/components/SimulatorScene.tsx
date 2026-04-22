@@ -4,7 +4,7 @@ import { OrbitControls, Grid } from '@react-three/drei';
 import { Physics, RigidBody } from '@react-three/rapier';
 import { RobotArm } from './RobotArm';
 
-export function SimulatorScene() {
+export function SimulatorScene({ jointStates }: { jointStates: Record<string, number> }) {
   return (
     <div style={{ width: '100%', height: '100%' }}>
       <Canvas camera={{ position: [1.5, 1.5, 1.5], fov: 50 }}>
@@ -97,7 +97,7 @@ export function SimulatorScene() {
             </group>
           </RigidBody>
 
-          <RobotArm />
+          <RobotArm jointStates={jointStates} />
         </Physics>
       </Canvas>
     </div>
