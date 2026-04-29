@@ -7,8 +7,8 @@ from moveit_configs_utils import MoveItConfigsBuilder
 def generate_launch_description():
     # パス設定
     urdf_path = '/app/urdf/dummy_arm.urdf'
-    srdf_path = '/app/config/dummy_arm.srdf'
-    kinematics_yaml_path = '/app/config/kinematics.yaml'
+    srdf_path = '/app/moveit_config/config/dummy_arm.srdf'
+    kinematics_yaml_path = '/app/moveit_config/config/kinematics.yaml'
 
     with open(urdf_path, 'r') as f:
         robot_description_content = f.read()
@@ -59,7 +59,7 @@ def generate_launch_description():
     # IK Node (直接スクリプトを実行)
     from launch.actions import ExecuteProcess
     ik_node = ExecuteProcess(
-        cmd=['python3', '/app/scripts/ik_node.py'],
+        cmd=['python3', '/app/moveit_config/scripts/ik_node.py'],
         output='screen'
     )
 
