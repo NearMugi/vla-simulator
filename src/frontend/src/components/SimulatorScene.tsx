@@ -35,61 +35,52 @@ export function SimulatorScene({ jointStates }: { jointStates: Record<string, nu
             </mesh>
           </RigidBody>
 
-          {/* 学習ターゲット用オブジェクト（アームのリーチに合わせて少し遠くに配置） */}
-          {/* グリッパーの最大開口幅は約9cm（0.09m）なので、幅は6〜7cm程度に抑えつつ高さを出します */}
-
-          {/* 1. 四角柱 (直方体) - 目標 */}
-          <RigidBody position={[0.3, 0.0, 0.3]} colliders="cuboid">
+          {/* 1. 四角柱 (直方体) - 右側に配置 */}
+          <RigidBody position={[-0.2, 0.075, 0.25]} colliders="cuboid">
             <mesh castShadow receiveShadow>
-              {/* 幅6cm、高さ15cm、奥行き6cm */}
               <boxGeometry args={[0.06, 0.15, 0.06]} />
-              <meshStandardMaterial color="#ef4444" /> {/* 赤 */}
+              <meshStandardMaterial color="#ef4444" />
             </mesh>
           </RigidBody>
 
-          {/* 2. 円柱 */}
-          <RigidBody position={[-0.1, 0.0, 0.5]} colliders="hull">
+          {/* 2. 円柱 - 右側に配置 */}
+          <RigidBody position={[0.2, 0.075, 0.35]} colliders="hull">
             <mesh castShadow receiveShadow>
-              {/* 半径3.5cm (直径7cm)、高さ15cm */}
               <cylinderGeometry args={[0.035, 0.035, 0.15, 16]} />
-              <meshStandardMaterial color="#3b82f6" /> {/* 青 */}
+              <meshStandardMaterial color="#3b82f6" />
             </mesh>
           </RigidBody>
 
-          {/* 3. 円錐 */}
-          <RigidBody position={[0.0, 0.0, 0.6]} colliders="hull">
+          {/* 3. 六角柱 */}
+          <RigidBody position={[0.0, 0.075, 0.45]} colliders="hull">
             <mesh castShadow receiveShadow>
-              {/* 底面半径4cm (直径8cm)、高さ14cm */}
-              <coneGeometry args={[0.04, 0.14, 16]} />
-              <meshStandardMaterial color="#eab308" /> {/* 黄 */}
+              {/* 六角柱は cylinderGeometry の分割数を 6 にすることで表現 */}
+              <cylinderGeometry args={[0.04, 0.04, 0.15, 6]} />
+              <meshStandardMaterial color="#10b981" /> {/* 緑 */}
             </mesh>
           </RigidBody>
 
-          {/* 運ぶ先の箱 (Tray) - 円錐の真反対(180度裏側)に配置 */}
-          {/* オブジェクトが大きくなったので、箱も少し大きく(30cm四方)、壁を高く(12cm)します */}
+          {/* 運ぶ先のケース (Tray) */}
           <RigidBody type="fixed">
-            <group position={[0.0, 0.02, -0.6]}>
+            <group position={[0.0, 0.02, -0.4]}>
               {/* 底面 */}
               <mesh position={[0, -0.01, 0]} receiveShadow castShadow>
                 <boxGeometry args={[0.3, 0.02, 0.3]} />
                 <meshStandardMaterial color="#14b8a6" transparent opacity={0.5} />
               </mesh>
-              {/* 左の壁 */}
+              {/* 壁 */}
               <mesh position={[-0.14, 0.05, 0]} receiveShadow castShadow>
                 <boxGeometry args={[0.02, 0.12, 0.3]} />
                 <meshStandardMaterial color="#14b8a6" transparent opacity={0.5} />
               </mesh>
-              {/* 右の壁 */}
               <mesh position={[0.14, 0.05, 0]} receiveShadow castShadow>
                 <boxGeometry args={[0.02, 0.12, 0.3]} />
                 <meshStandardMaterial color="#14b8a6" transparent opacity={0.5} />
               </mesh>
-              {/* 奥の壁 */}
               <mesh position={[0, 0.05, -0.14]} receiveShadow castShadow>
                 <boxGeometry args={[0.3, 0.12, 0.02]} />
                 <meshStandardMaterial color="#14b8a6" transparent opacity={0.5} />
               </mesh>
-              {/* 手前の壁 */}
               <mesh position={[0, 0.05, 0.14]} receiveShadow castShadow>
                 <boxGeometry args={[0.3, 0.12, 0.02]} />
                 <meshStandardMaterial color="#14b8a6" transparent opacity={0.5} />

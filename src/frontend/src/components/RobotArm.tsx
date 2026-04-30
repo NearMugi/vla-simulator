@@ -86,7 +86,7 @@ export function RobotArm({ jointStates }: { jointStates: Record<string, number> 
             key={linkName} 
             ref={rigidBodyRefs.current[linkName]} 
             type="kinematicPosition" 
-            colliders="hull" 
+            colliders={linkName.includes('finger') ? "cuboid" : "hull"} 
           >
             {meshes.map((mesh, idx) => (
               <mesh 

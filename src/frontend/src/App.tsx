@@ -21,7 +21,7 @@ function eulerToQuaternion(roll: number, pitch: number, yaw: number) {
 
 function App() {
   const { isConnected, sendTargetPose, sendGripperCmd, jointStates } = useRos();
-  
+
   const [targetPos, setTargetPos] = useState({ x: 0.2, y: 0.3, z: 0.4 });
   // 初期姿勢: 下向き(X軸で180度回転)をRoll=180として設定
   const [targetRPY, setTargetRPY] = useState({ r: 180, p: 0, y: 0 });
@@ -34,7 +34,7 @@ function App() {
       const rollRad = targetRPY.r * (Math.PI / 180);
       const pitchRad = targetRPY.p * (Math.PI / 180);
       const yawRad = targetRPY.y * (Math.PI / 180);
-      
+
       const q = eulerToQuaternion(rollRad, pitchRad, yawRad);
       sendTargetPose(targetPos.x, targetPos.y, targetPos.z, q);
     }, 200);
@@ -58,7 +58,7 @@ function App() {
       <div className="ui-overlay">
         <div className="app-container">
           <h1>VLA Simulator Control</h1>
-          
+
           <div className={`status ${isConnected ? 'connected' : 'disconnected'}`}>
             {isConnected ? '● Connected to ROS 2' : '○ Disconnected'}
           </div>
@@ -99,19 +99,25 @@ function App() {
             </div>
           </div>
 
-          <div style={{ marginTop: '20px', display: 'flex', gap: '10px' }}>
-            <button 
-              onClick={() => sendGripperCmd(0.0)} 
-              disabled={!isConnected}
-            >
-              Open Gripper
-            </button>
-            <button 
-              onClick={() => sendGripperCmd(0.04)} 
-              disabled={!isConnected}
-            >
-              Close Gripper
-            </button>
+          <div style={{ marginTop: '20px' }}>
+            <h3>Gripper Control</h3>
+            <label>
+              Grip: {((targetPos as any).gripperPercent || 0)}%
+              <input
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value={(targetPos as any).gripperPercent || 0}
+                onChange={e => {
+                  const percent = parseInt(e.target.value);
+                  setTargetPos(prev => ({ ...prev, gripperPercent: percent }));
+                  // 0.04 (Closed) * percent / 100
+                  sendGripperCmd(0.04 * (percent / 100));
+                }}
+                style={{ width: '100%', marginLeft: '10px' }}
+              />
+            </label>
           </div>
         </div>
       </div>
