@@ -7,7 +7,10 @@ import { RobotArm } from './RobotArm';
 export function SimulatorScene({ jointStates }: { jointStates: Record<string, number> }) {
   return (
     <div style={{ width: '100%', height: '100%' }}>
-      <Canvas camera={{ position: [1.5, 1.5, 1.5], fov: 50 }}>
+      <Canvas 
+        camera={{ position: [1.5, 1.5, 1.5], fov: 50 }}
+        gl={{ preserveDrawingBuffer: true }}
+      >
         <color attach="background" args={['#1a1a1a']} />
 
         {/* 照明設定 */}

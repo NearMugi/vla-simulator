@@ -52,6 +52,57 @@ function App() {
     setTargetRPY(prev => ({ ...prev, [axis]: parseFloat(value) }));
   };
 
+  const handleRunInference = async () => {
+    if (!isConnected) return;
+
+    // 1. シミュレータのCanvasを取得して画像化
+    // react-three-fiberのCanvasはデフォルトで preserveDrawingBuffer: false なので、
+    // タイミングによっては真っ暗になる可能性がありますが、まずはこの方法で試行
+    const canvas = document.querySelector('canvas');
+    if (!canvas) {
+      alert('Canvas not found');
+      return;
+    }
+
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+
+      // 2. バックエンドへ送信
+      const formData = new FormData();
+      formData.append('image', blob, 'screenshot.png');
+
+      try {
+        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+        const response = await fetch(`${backendUrl}/predict`, {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!response.ok) throw new Error('Backend error');
+
+        const data = await response.json();
+        console.log('VLA Prediction:', data);
+
+        // 3. 推論結果をUI状態に反映（自動的にデバウンス経由でROSへ送信される）
+        setTargetPos({
+          x: data.x,
+          y: data.y,
+          z: data.z,
+          gripperPercent: data.gripper
+        });
+        setTargetRPY({
+          r: data.roll,
+          p: data.pitch,
+          y: data.yaw
+        });
+
+      } catch (error) {
+        console.error('Inference failed:', error);
+        alert('推論に失敗しました');
+      }
+    }, 'image/png');
+  };
+
   return (
     <>
       {/* 3Dシミュレータ画面（全画面） */}
@@ -65,6 +116,18 @@ function App() {
           <div className={`status ${isConnected ? 'connected' : 'disconnected'}`}>
             {isConnected ? '● Connected to ROS 2' : '○ Disconnected'}
           </div>
+
+          <button 
+            onClick={handleRunInference} 
+            disabled={!isConnected}
+            style={{ 
+              marginBottom: '20px', 
+              backgroundColor: '#8b5cf6', // 紫色で区別
+              fontSize: '1.1rem' 
+            }}
+          >
+            Run VLA Inference
+          </button>
 
           <div style={{ marginTop: '20px' }}>
             <h3>Target Position (m)</h3>

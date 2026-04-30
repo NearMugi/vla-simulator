@@ -24,6 +24,17 @@ services:
     environment:
       - CHOKIDAR_USEPOLLING=true
       - VITE_ROSBRIDGE_URL=ws://localhost:9090
+      - VITE_BACKEND_URL=http://localhost:8000
     depends_on:
       - ros2
+      - backend
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./src/backend
+      dockerfile: Dockerfile
+    container_name: vla_backend
+    ports:
+      - "8000:8000"
     restart: unless-stopped
