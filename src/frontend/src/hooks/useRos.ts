@@ -59,7 +59,7 @@ export function useRos() {
     };
   }, [isConnected]);
 
-  const sendDummyPose = () => {
+  const sendTargetPose = (x: number, y: number, z: number, q = { x: 1.0, y: 0.0, z: 0.0, w: 0.0 }) => {
     if (!rosRef.current || !isConnected) return;
 
     const topic = new ROSLIB.Topic({
@@ -68,7 +68,6 @@ export function useRos() {
       messageType: 'geometry_msgs/PoseStamped'
     });
 
-    // Create a dummy PoseStamped message
     const message = new ROSLIB.Message({
       header: {
         stamp: {
@@ -78,13 +77,13 @@ export function useRos() {
         frame_id: 'base_link'
       },
       pose: {
-        position: { x: 0.2, y: 0.3, z: 0.4 }, // 到達可能な位置に変更
-        orientation: { x: 0.0, y: 0.0, z: 0.0, w: 0.0 } // 下向きの姿勢（180度X軸回転）
+        position: { x, y, z },
+        orientation: q
       }
     });
 
     topic.publish(message);
-    console.log('Published dummy pose:', message);
+    console.log('Published target pose:', message.pose.position);
   };
 
   const sendGripperCmd = (width: number) => {
@@ -104,5 +103,5 @@ export function useRos() {
     console.log('Published gripper command:', width);
   };
 
-  return { isConnected, sendDummyPose, sendGripperCmd, jointStates };
+  return { isConnected, sendTargetPose, sendGripperCmd, jointStates };
 }
