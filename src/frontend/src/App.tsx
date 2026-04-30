@@ -22,7 +22,7 @@ function eulerToQuaternion(roll: number, pitch: number, yaw: number) {
 function App() {
   const { isConnected, sendTargetPose, sendGripperCmd, jointStates } = useRos();
 
-  const [targetPos, setTargetPos] = useState({ x: 0.2, y: 0.3, z: 0.4 });
+  const [targetPos, setTargetPos] = useState({ x: 0.0, y: 0.5, z: 0.0, gripperPercent: 0 });
   // 初期姿勢: 下向き(X軸で180度回転)をRoll=180として設定
   const [targetRPY, setTargetRPY] = useState({ r: 180, p: 0, y: 0 });
 
@@ -37,6 +37,9 @@ function App() {
 
       const q = eulerToQuaternion(rollRad, pitchRad, yawRad);
       sendTargetPose(targetPos.x, targetPos.y, targetPos.z, q);
+      
+      // グリッパーの状態も同期送信
+      sendGripperCmd(0.04 * (targetPos.gripperPercent / 100));
     }, 200);
     return () => clearTimeout(handler);
   }, [targetPos, targetRPY, isConnected]);

@@ -35,27 +35,26 @@ export function SimulatorScene({ jointStates }: { jointStates: Record<string, nu
             </mesh>
           </RigidBody>
 
-          {/* 1. 四角柱 (直方体) - 右側に配置 */}
-          <RigidBody position={[-0.2, 0.075, 0.25]} colliders="cuboid">
+          <RigidBody position={[-0.2, 0.0, 0.25]} colliders="cuboid" friction={2.0} restitution={0.0}>
             <mesh castShadow receiveShadow>
-              <boxGeometry args={[0.06, 0.15, 0.06]} />
+              <boxGeometry args={[0.06, 0.05, 0.06]} />
               <meshStandardMaterial color="#ef4444" />
             </mesh>
           </RigidBody>
 
           {/* 2. 円柱 - 右側に配置 */}
-          <RigidBody position={[0.2, 0.075, 0.35]} colliders="hull">
+          <RigidBody position={[0.2, 0.0, 0.35]} colliders="hull" friction={2.0} restitution={0.0}>
             <mesh castShadow receiveShadow>
-              <cylinderGeometry args={[0.035, 0.035, 0.15, 16]} />
+              <cylinderGeometry args={[0.035, 0.035, 0.05, 16]} />
               <meshStandardMaterial color="#3b82f6" />
             </mesh>
           </RigidBody>
 
           {/* 3. 六角柱 */}
-          <RigidBody position={[0.0, 0.075, 0.45]} colliders="hull">
+          <RigidBody position={[0.0, 0.0, 0.45]} colliders="hull" friction={2.0} restitution={0.0}>
             <mesh castShadow receiveShadow>
               {/* 六角柱は cylinderGeometry の分割数を 6 にすることで表現 */}
-              <cylinderGeometry args={[0.04, 0.04, 0.15, 6]} />
+              <cylinderGeometry args={[0.04, 0.04, 0.05, 6]} />
               <meshStandardMaterial color="#10b981" /> {/* 緑 */}
             </mesh>
           </RigidBody>

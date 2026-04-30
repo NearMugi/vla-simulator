@@ -89,6 +89,9 @@ class IKNode(Node):
                 # 状態を更新（アームの関節のみ更新し、グリッパーは維持する）
                 for i, name in enumerate(response.solution.joint_state.name):
                     if name in self.current_joint_state.name:
+                        # 指の関節はIKの結果で上書きしない（gripper_cmd_callbackで管理するため）
+                        if 'finger' in name:
+                            continue
                         idx = self.current_joint_state.name.index(name)
                         self.current_joint_state.position[idx] = response.solution.joint_state.position[i]
                 
