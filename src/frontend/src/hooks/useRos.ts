@@ -8,7 +8,7 @@ export function useRos() {
   useEffect(() => {
     const rosUrl = import.meta.env.VITE_ROSBRIDGE_URL || 'ws://localhost:9090';
     console.log('Connecting to ROS web socket:', rosUrl);
-    
+
     const ros = new ROSLIB.Ros({
       url: rosUrl
     });
@@ -35,7 +35,31 @@ export function useRos() {
     };
   }, []);
 
-  const sendDummyPose = () => {
+  const [jointStates, setJointStates] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    if (!rosRef.current || !isConnected) return;
+
+    const jointStateTopic = new ROSLIB.Topic({
+      ros: rosRef.current,
+      name: '/joint_states',
+      messageType: 'sensor_msgs/JointState'
+    });
+
+    jointStateTopic.subscribe((message: any) => {
+      const newStates: Record<string, number> = {};
+      message.name.forEach((name: string, index: number) => {
+        newStates[name] = message.position[index];
+      });
+      setJointStates(newStates);
+    });
+
+    return () => {
+      jointStateTopic.unsubscribe();
+    };
+  }, [isConnected]);
+
+  const sendTargetPose = (x: number, y: number, z: number, q = { x: 1.0, y: 0.0, z: 0.0, w: 0.0 }) => {
     if (!rosRef.current || !isConnected) return;
 
     const topic = new ROSLIB.Topic({
@@ -44,7 +68,6 @@ export function useRos() {
       messageType: 'geometry_msgs/PoseStamped'
     });
 
-    // Create a dummy PoseStamped message
     const message = new ROSLIB.Message({
       header: {
         stamp: {
@@ -54,14 +77,31 @@ export function useRos() {
         frame_id: 'base_link'
       },
       pose: {
-        position: { x: 0.5, y: 0.0, z: 0.3 },
-        orientation: { x: 0.0, y: 0.0, z: 0.0, w: 1.0 }
+        position: { x, y, z },
+        orientation: q
       }
     });
 
     topic.publish(message);
-    console.log('Published dummy pose:', message);
+    console.log('Published target pose:', message.pose.position);
   };
 
-  return { isConnected, sendDummyPose };
+  const sendGripperCmd = (width: number) => {
+    if (!rosRef.current || !isConnected) return;
+
+    const topic = new ROSLIB.Topic({
+      ros: rosRef.current,
+      name: '/vla/gripper_cmd',
+      messageType: 'std_msgs/Float32'
+    });
+
+    const message = new ROSLIB.Message({
+      data: width
+    });
+
+    topic.publish(message);
+    console.log('Published gripper command:', width);
+  };
+
+  return { isConnected, sendTargetPose, sendGripperCmd, jointStates };
 }
