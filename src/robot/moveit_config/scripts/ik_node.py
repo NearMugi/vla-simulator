@@ -14,10 +14,10 @@ class IKNode(Node):
         # 現在の関節角度を保持
         self.current_joint_state = JointState()
         self.current_joint_state.name = [
-            'joint1', 'joint2', 'joint3', 'joint4',
+            'joint1', 'joint2', 'joint3', 'joint4', 'joint5', 'joint6',
             'left_finger_joint', 'right_finger_joint'
         ]
-        self.current_joint_state.position = [0.0] * 6
+        self.current_joint_state.position = [0.0] * 8
 
         # IKサービスクライアントの設定
         self.ik_client = self.create_client(GetPositionIK, '/compute_ik')

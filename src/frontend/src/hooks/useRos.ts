@@ -78,8 +78,8 @@ export function useRos() {
         frame_id: 'base_link'
       },
       pose: {
-        position: { x: 0.2, y: 0.1, z: 0.3 }, // 到達可能な位置に変更
-        orientation: { x: 0.0, y: 0.0, z: 0.0, w: 1.0 } // 正常な無回転クォータニオン
+        position: { x: 0.2, y: 0.3, z: 0.4 }, // 到達可能な位置に変更
+        orientation: { x: 0.0, y: 0.0, z: 0.0, w: 0.0 } // 下向きの姿勢（180度X軸回転）
       }
     });
 
