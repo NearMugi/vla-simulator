@@ -8,7 +8,7 @@ export function useRos() {
   useEffect(() => {
     const rosUrl = import.meta.env.VITE_ROSBRIDGE_URL || 'ws://localhost:9090';
     console.log('Connecting to ROS web socket:', rosUrl);
-    
+
     const ros = new ROSLIB.Ros({
       url: rosUrl
     });
@@ -78,8 +78,8 @@ export function useRos() {
         frame_id: 'base_link'
       },
       pose: {
-        position: { x: 0.3, y: 0.3, z: 0.4 }, // 少し位置を変える
-        orientation: { x: 0.0, y: 0.0, z: 0.0, w: 1.0 }
+        position: { x: 0.2, y: 0.1, z: 0.3 }, // 到達可能な位置に変更
+        orientation: { x: 0.0, y: 0.0, z: 0.0, w: 1.0 } // 正常な無回転クォータニオン
       }
     });
 
@@ -87,5 +87,22 @@ export function useRos() {
     console.log('Published dummy pose:', message);
   };
 
-  return { isConnected, sendDummyPose, jointStates };
+  const sendGripperCmd = (width: number) => {
+    if (!rosRef.current || !isConnected) return;
+
+    const topic = new ROSLIB.Topic({
+      ros: rosRef.current,
+      name: '/vla/gripper_cmd',
+      messageType: 'std_msgs/Float32'
+    });
+
+    const message = new ROSLIB.Message({
+      data: width
+    });
+
+    topic.publish(message);
+    console.log('Published gripper command:', width);
+  };
+
+  return { isConnected, sendDummyPose, sendGripperCmd, jointStates };
 }

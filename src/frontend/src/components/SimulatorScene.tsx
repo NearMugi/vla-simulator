@@ -9,18 +9,18 @@ export function SimulatorScene({ jointStates }: { jointStates: Record<string, nu
     <div style={{ width: '100%', height: '100%' }}>
       <Canvas camera={{ position: [1.5, 1.5, 1.5], fov: 50 }}>
         <color attach="background" args={['#1a1a1a']} />
-        
+
         {/* 照明設定 */}
         <ambientLight intensity={0.5} />
         <directionalLight position={[10, 10, 5]} intensity={1.5} castShadow />
 
         {/* グリッド表示（床） */}
-        <Grid 
-          infiniteGrid 
-          fadeDistance={10} 
-          fadeStrength={5} 
-          cellColor="#6f6f6f" 
-          sectionColor="#9d4b4b" 
+        <Grid
+          infiniteGrid
+          fadeDistance={10}
+          fadeStrength={5}
+          cellColor="#6f6f6f"
+          sectionColor="#9d4b4b"
         />
 
         <OrbitControls makeDefault />
@@ -37,9 +37,9 @@ export function SimulatorScene({ jointStates }: { jointStates: Record<string, nu
 
           {/* 学習ターゲット用オブジェクト（アームのリーチに合わせて少し遠くに配置） */}
           {/* グリッパーの最大開口幅は約9cm（0.09m）なので、幅は6〜7cm程度に抑えつつ高さを出します */}
-          
+
           {/* 1. 四角柱 (直方体) - 目標 */}
-          <RigidBody position={[0.2, 0.2, 0.5]} colliders="cuboid">
+          <RigidBody position={[0.3, 0.0, 0.3]} colliders="cuboid">
             <mesh castShadow receiveShadow>
               {/* 幅6cm、高さ15cm、奥行き6cm */}
               <boxGeometry args={[0.06, 0.15, 0.06]} />
@@ -48,7 +48,7 @@ export function SimulatorScene({ jointStates }: { jointStates: Record<string, nu
           </RigidBody>
 
           {/* 2. 円柱 */}
-          <RigidBody position={[-0.1, 0.2, 0.5]} colliders="hull">
+          <RigidBody position={[-0.1, 0.0, 0.5]} colliders="hull">
             <mesh castShadow receiveShadow>
               {/* 半径3.5cm (直径7cm)、高さ15cm */}
               <cylinderGeometry args={[0.035, 0.035, 0.15, 16]} />
@@ -57,7 +57,7 @@ export function SimulatorScene({ jointStates }: { jointStates: Record<string, nu
           </RigidBody>
 
           {/* 3. 円錐 */}
-          <RigidBody position={[0.0, 0.2, 0.6]} colliders="hull">
+          <RigidBody position={[0.0, 0.0, 0.6]} colliders="hull">
             <mesh castShadow receiveShadow>
               {/* 底面半径4cm (直径8cm)、高さ14cm */}
               <coneGeometry args={[0.04, 0.14, 16]} />

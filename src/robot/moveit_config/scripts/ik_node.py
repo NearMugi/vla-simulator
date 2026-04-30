@@ -3,6 +3,7 @@ import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import JointState
+from std_msgs.msg import Float32
 from moveit_msgs.srv import GetPositionIK
 from moveit_msgs.msg import PositionIKRequest, MoveItErrorCodes
 
@@ -13,7 +14,8 @@ class IKNode(Node):
         # 現在の関節角度を保持
         self.current_joint_state = JointState()
         self.current_joint_state.name = [
-            'joint1', 'joint2', 'joint3', 'joint4', 'joint5', 'joint6'
+            'joint1', 'joint2', 'joint3', 'joint4',
+            'left_finger_joint', 'right_finger_joint'
         ]
         self.current_joint_state.position = [0.0] * 6
 
@@ -33,7 +35,31 @@ class IKNode(Node):
         # パブリッシャ: 計算された関節角度
         self.joint_pub = self.create_publisher(JointState, '/joint_states', 10)
         
-        self.get_logger().info('IK Node started. Subscribing to /vla/target_pose')
+        # サブスクライバ: フロントエンドからのグリッパー開閉コマンド (0.0 ~ 0.04)
+        self.gripper_sub = self.create_subscription(
+            Float32,
+            '/vla/gripper_cmd',
+            self.gripper_cmd_callback,
+            10
+        )
+        
+        self.get_logger().info('IK Node started. Subscribing to /vla/target_pose and /vla/gripper_cmd')
+
+    def gripper_cmd_callback(self, msg):
+        # グリッパーの開閉幅を更新
+        width = max(0.0, min(0.04, msg.data))
+        
+        # current_joint_state内のグリッパージョイントを探して更新
+        if 'left_finger_joint' in self.current_joint_state.name:
+            idx_l = self.current_joint_state.name.index('left_finger_joint')
+            self.current_joint_state.position[idx_l] = width
+        if 'right_finger_joint' in self.current_joint_state.name:
+            idx_r = self.current_joint_state.name.index('right_finger_joint')
+            self.current_joint_state.position[idx_r] = width
+            
+        # UI同期のためにパブリッシュ
+        self.joint_pub.publish(self.current_joint_state)
+        self.get_logger().info(f'Gripper set to: {width}')
 
     def target_pose_callback(self, msg):
         self.get_logger().info(f'Received target pose: {msg.pose.position.x}, {msg.pose.position.y}, {msg.pose.position.z}')
@@ -60,8 +86,11 @@ class IKNode(Node):
             if response.error_code.val == MoveItErrorCodes.SUCCESS:
                 self.get_logger().info(f'IK solution found! Joints: {response.solution.joint_state.name}')
                 
-                # 状態を更新
-                self.current_joint_state = response.solution.joint_state
+                # 状態を更新（アームの関節のみ更新し、グリッパーは維持する）
+                for i, name in enumerate(response.solution.joint_state.name):
+                    if name in self.current_joint_state.name:
+                        idx = self.current_joint_state.name.index(name)
+                        self.current_joint_state.position[idx] = response.solution.joint_state.position[i]
                 
                 # JointStateメッセージをパブリッシュ（フロントエンド同期用）
                 self.joint_pub.publish(self.current_joint_state)

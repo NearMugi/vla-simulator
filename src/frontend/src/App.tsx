@@ -2,7 +2,7 @@ import { useRos } from './hooks/useRos';
 import { SimulatorScene } from './components/SimulatorScene';
 
 function App() {
-  const { isConnected, sendDummyPose, jointStates } = useRos();
+  const { isConnected, sendDummyPose, sendGripperCmd, jointStates } = useRos();
 
   return (
     <>
@@ -24,6 +24,21 @@ function App() {
           >
             Send Dummy Target Pose
           </button>
+
+          <div style={{ marginTop: '20px', display: 'flex', gap: '10px' }}>
+            <button 
+              onClick={() => sendGripperCmd(0.0)} 
+              disabled={!isConnected}
+            >
+              Open Gripper
+            </button>
+            <button 
+              onClick={() => sendGripperCmd(0.04)} 
+              disabled={!isConnected}
+            >
+              Close Gripper
+            </button>
+          </div>
         </div>
       </div>
     </>
