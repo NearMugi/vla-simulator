@@ -1,23 +1,33 @@
 import React from 'react';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Grid } from '@react-three/drei';
+import { OrbitControls, Grid, PerspectiveCamera } from '@react-three/drei';
 import { Physics, RigidBody } from '@react-three/rapier';
 import { RobotArm } from './RobotArm';
 
-export function SimulatorScene({ jointStates }: { jointStates: Record<string, number> }) {
+export function SimulatorScene({ jointStates, cameraPosition }: { jointStates: Record<string, number>, cameraPosition?: [number, number, number] }) {
+  const controlsRef = React.useRef<any>(null);
+
+  // カメラ位置が変更されたら追従させる
+  React.useEffect(() => {
+    if (cameraPosition && controlsRef.current) {
+      const { object, target } = controlsRef.current;
+      object.position.set(...cameraPosition);
+      controlsRef.current.update();
+    }
+  }, [cameraPosition]);
+
   return (
     <div style={{ width: '100%', height: '100%' }}>
       <Canvas 
-        camera={{ position: [1.5, 1.5, 1.5], fov: 50 }}
         gl={{ preserveDrawingBuffer: true }}
       >
+        <PerspectiveCamera makeDefault position={[1.5, 1.5, 1.5]} fov={50} />
         <color attach="background" args={['#1a1a1a']} />
 
-        {/* 照明設定 */}
+        {/* ... (照明など) ... */}
         <ambientLight intensity={0.5} />
         <directionalLight position={[10, 10, 5]} intensity={1.5} castShadow />
 
-        {/* グリッド表示（床） */}
         <Grid
           infiniteGrid
           fadeDistance={10}
@@ -26,7 +36,7 @@ export function SimulatorScene({ jointStates }: { jointStates: Record<string, nu
           sectionColor="#9d4b4b"
         />
 
-        <OrbitControls makeDefault />
+        <OrbitControls ref={controlsRef} makeDefault />
 
         {/* 物理空間とロボットの描画 */}
         <Physics>

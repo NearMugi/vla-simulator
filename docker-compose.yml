@@ -8,6 +8,7 @@ services:
       - "9090:9090"
     environment:
       - ROS_DOMAIN_ID=0
+      - TZ=Asia/Tokyo
     restart: unless-stopped
 
   frontend:
@@ -25,6 +26,7 @@ services:
       - CHOKIDAR_USEPOLLING=true
       - VITE_ROSBRIDGE_URL=ws://localhost:9090
       - VITE_BACKEND_URL=http://localhost:8000
+      - TZ=Asia/Tokyo
     depends_on:
       - ros2
       - backend
@@ -37,4 +39,9 @@ services:
     container_name: vla_backend
     ports:
       - "8000:8000"
+    environment:
+      - SAVE_DEBUG_IMAGES=true
+      - TZ=Asia/Tokyo
+    volumes:
+      - ./src/backend/debug_images:/app/debug_images
     restart: unless-stopped

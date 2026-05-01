@@ -2,8 +2,17 @@ from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import time
+import os
+from datetime import datetime
 
 app = FastAPI(title="VLA Simulator Backend")
+
+# デバッグ用画像の保存設定
+SAVE_DEBUG_IMAGES = os.getenv("SAVE_DEBUG_IMAGES", "false").lower() == "true"
+DEBUG_DIR = "debug_images"
+
+if SAVE_DEBUG_IMAGES and not os.path.exists(DEBUG_DIR):
+    os.makedirs(DEBUG_DIR)
 
 # CORS設定 (Vite Frontend からのアクセスを許可)
 app.add_middleware(
@@ -30,11 +39,17 @@ async def root():
 @app.post("/predict", response_model=PoseResponse)
 async def predict(image: UploadFile = File(...)):
     # ここで画像を処理して VLA モデルに渡す予定
-    # 今回は疎通確認のため、ダミーの目標座標を返す
-    
-    # 画像の読み込み（動作確認用）
     contents = await image.read()
-    print(f"Received image: {len(contents)} bytes")
+    
+    if SAVE_DEBUG_IMAGES:
+        try:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            filepath = os.path.join(DEBUG_DIR, f"input_{timestamp}.png")
+            with open(filepath, "wb") as f:
+                f.write(contents)
+            print(f"Saved debug image: {filepath}")
+        except Exception as e:
+            print(f"Failed to save debug image: {e}")
 
     # ダミーの推論結果 (四角柱付近を狙うポーズ)
     return PoseResponse(
