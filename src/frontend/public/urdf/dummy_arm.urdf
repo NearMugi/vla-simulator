@@ -30,6 +30,21 @@
     </visual>
   </link>
 
+  <!-- Virtual Floor for Collision avoidance -->
+  <link name="floor">
+    <collision>
+      <geometry>
+        <box size="4.0 0.1 4.0"/>
+      </geometry>
+      <origin xyz="0 -0.05 0" rpy="0 0 0"/>
+    </collision>
+  </link>
+  <joint name="floor_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="floor"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
   <!-- Link 1 (Shoulder Pan) -->
   <link name="link1">
     <visual>
@@ -78,7 +93,7 @@
     <origin xyz="0 0.15 0" rpy="0 0 0"/>
     <!-- Pitch回転 -->
     <axis xyz="0 0 1"/> 
-    <limit lower="-3.14" upper="3.14" effort="10.0" velocity="1.0"/>
+    <limit lower="-1.57" upper="1.57" effort="10.0" velocity="1.0"/>
   </joint>
 
   <!-- Link 3 (Elbow) -->

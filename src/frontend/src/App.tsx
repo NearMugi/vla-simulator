@@ -52,18 +52,151 @@ function App() {
     setTargetRPY(prev => ({ ...prev, [axis]: parseFloat(value) }));
   };
 
+  const [cameraPos, setCameraPos] = useState<[number, number, number] | undefined>(undefined);
+  const [isInferring, setIsInferring] = useState(false);
+  const [lastCaptureUrl, setLastCaptureUrl] = useState<string | null>(null);
+  const [inferenceResult, setInferenceResult] = useState<any>(null);
+
+  const handleRunInference = async () => {
+    if (!isConnected || isInferring) return;
+    setIsInferring(true);
+    setInferenceResult(null);
+
+    // 推論時は定点カメラに固定（モデルの学習条件に合わせるため）
+    setCameraPos([1.2, 0.8, 1.2]); 
+    
+    // カメラの移動とアームの静止を待つために少し長めに待機
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // 1. シミュレータのCanvasを取得して画像化
+    const canvas = document.querySelector('canvas');
+    if (!canvas) {
+      alert('Canvas not found');
+      setIsInferring(false);
+      return;
+    }
+
+    // バックエンド送信用の画像を取得
+    canvas.toBlob(async (blob) => {
+      if (!blob) {
+        setIsInferring(false);
+        return;
+      }
+
+      // 2. バックエンドへ送信
+      const formData = new FormData();
+      formData.append('image', blob, 'screenshot.png');
+
+      try {
+        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+        const response = await fetch(`${backendUrl}/predict`, {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!response.ok) throw new Error('Backend error');
+
+        const data = await response.json();
+        console.log('VLA Prediction:', data);
+        setInferenceResult(data);
+
+        // 3. 推論結果をUI状態に反映（これによりアームが移動を開始する）
+        setTargetPos({
+          x: data.x,
+          y: data.y,
+          z: data.z,
+          gripperPercent: data.gripper
+        });
+        setTargetRPY({
+          r: data.roll,
+          p: data.pitch,
+          y: data.yaw
+        });
+
+        // 4. アームの移動（ROS通信のデバウンス200ms + 通信・描画時間）を待機してからキャプチャ
+        // これにより、UIに表示される「Last Capture」と「Prediction」の座標が一致する
+        await new Promise(resolve => setTimeout(resolve, 800));
+        const finalCanvas = document.querySelector('canvas');
+        if (finalCanvas) {
+          setLastCaptureUrl(finalCanvas.toDataURL('image/png'));
+        }
+
+      } catch (error) {
+        console.error('Inference failed:', error);
+        alert('推論に失敗しました');
+      } finally {
+        setIsInferring(false);
+      }
+    }, 'image/png');
+  };
+
   return (
     <>
       {/* 3Dシミュレータ画面（全画面） */}
-      <SimulatorScene jointStates={jointStates} />
+      <SimulatorScene jointStates={jointStates} cameraPosition={cameraPos} />
 
       {/* コントロールUI（オーバーレイ） */}
-      <div className="ui-overlay">
+      <div className="ui-overlay" style={{ maxHeight: '100vh', overflowY: 'auto' }}>
         <div className="app-container">
           <h1>VLA Simulator Control</h1>
 
           <div className={`status ${isConnected ? 'connected' : 'disconnected'}`}>
             {isConnected ? '● Connected to ROS 2' : '○ Disconnected'}
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '10px' }}>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button 
+                onClick={handleRunInference} 
+                disabled={!isConnected || isInferring}
+                style={{ 
+                  flex: 2, 
+                  backgroundColor: isInferring ? '#4b5563' : '#8b5cf6', 
+                  fontSize: '1.1rem',
+                  position: 'relative'
+                }}
+              >
+                {isInferring ? 'Inferring...' : 'Run VLA Inference'}
+              </button>
+              <button 
+                onClick={() => setCameraPos([1.2, 0.8, 1.2])}
+                style={{ flex: 1, backgroundColor: '#4b5563', fontSize: '0.9rem' }}
+              >
+                Snap View
+              </button>
+            </div>
+
+            {/* キャプチャ画像と推論結果のプレビュー */}
+            {(lastCaptureUrl || inferenceResult) && (
+              <div style={{ 
+                display: 'flex', 
+                gap: '15px', 
+                backgroundColor: 'rgba(0,0,0,0.3)', 
+                padding: '10px', 
+                borderRadius: '8px',
+                border: '1px solid rgba(255,255,255,0.1)'
+              }}>
+                {lastCaptureUrl && (
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontSize: '0.7rem', margin: '0 0 5px 0', opacity: 0.7 }}>Last Capture</p>
+                    <img src={lastCaptureUrl} alt="Last capture" style={{ width: '100%', borderRadius: '4px' }} />
+                  </div>
+                )}
+                {inferenceResult && (
+                  <div style={{ flex: 1, fontSize: '0.8rem' }}>
+                    <p style={{ fontSize: '0.7rem', margin: '0 0 5px 0', opacity: 0.7 }}>Prediction</p>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2px' }}>
+                      <span>X: {inferenceResult.x.toFixed(2)}</span>
+                      <span>R: {inferenceResult.roll.toFixed(0)}</span>
+                      <span>Y: {inferenceResult.y.toFixed(2)}</span>
+                      <span>P: {inferenceResult.pitch.toFixed(0)}</span>
+                      <span>Z: {inferenceResult.z.toFixed(2)}</span>
+                      <span>Y: {inferenceResult.yaw.toFixed(0)}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div style={{ marginTop: '20px' }}>
