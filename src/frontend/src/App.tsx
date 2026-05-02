@@ -56,6 +56,7 @@ function App() {
   const [isInferring, setIsInferring] = useState(false);
   const [lastCaptureUrl, setLastCaptureUrl] = useState<string | null>(null);
   const [inferenceResult, setInferenceResult] = useState<any>(null);
+  const [instruction, setInstruction] = useState("pick up the blue block");
 
   const handleRunInference = async () => {
     if (!isConnected || isInferring) return;
@@ -86,6 +87,7 @@ function App() {
       // 2. バックエンドへ送信
       const formData = new FormData();
       formData.append('image', blob, 'screenshot.png');
+      formData.append('instruction', instruction);
 
       try {
         const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
@@ -142,6 +144,24 @@ function App() {
 
           <div className={`status ${isConnected ? 'connected' : 'disconnected'}`}>
             {isConnected ? '● Connected to ROS 2' : '○ Disconnected'}
+          </div>
+
+          <div style={{ marginBottom: '15px' }}>
+            <label style={{ fontSize: '0.9rem', color: '#a78bfa', display: 'block', marginBottom: '5px' }}>Instruction</label>
+            <input 
+              type="text" 
+              value={instruction} 
+              onChange={e => setInstruction(e.target.value)}
+              placeholder="e.g. pick up the blue block"
+              style={{ 
+                width: '100%', 
+                padding: '8px', 
+                borderRadius: '4px', 
+                border: '1px solid #4b5563', 
+                backgroundColor: '#1f2937', 
+                color: 'white' 
+              }}
+            />
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '10px' }}>

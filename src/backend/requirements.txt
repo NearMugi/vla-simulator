@@ -4,3 +4,12 @@ python-multipart
 pillow
 numpy
 pydantic
+torch
+transformers==4.40.1
+tokenizers==0.19.1
+bitsandbytes>=0.43.0
+peft
+accelerate
+timm==0.9.16
+sentencepiece
+protobuf
