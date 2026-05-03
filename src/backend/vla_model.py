@@ -1,73 +1,101 @@
-import torch
+import os
+import sys
+
+# GPUメモリの競合を防ぐための設定
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+os.environ["TF_FORCE_GPU_ALLOW_GROWTH"] = "true"
+
+import traceback
+
+try:
+    import ml_dtypes
+    print(f"DEBUG: ml_dtypes version: {ml_dtypes.__version__}", flush=True)
+    print(f"DEBUG: ml_dtypes file: {ml_dtypes.__file__}", flush=True)
+    
+    import jax
+    print(f"DEBUG: jax version: {jax.__version__}", flush=True)
+    print(f"DEBUG: jax devices: {jax.devices()}", flush=True)
+
+    # 互換性パッチ: 新しい JAX で廃止された KeyArray を octo のために追加
+    if not hasattr(jax.random, "KeyArray"):
+        jax.random.KeyArray = jax.Array
+        print("DEBUG: Patched jax.random.KeyArray with jax.Array", flush=True)
+    
+    # ml_dtypes の属性を全表示して確認（デバッグ用）
+    # print(f"DEBUG: ml_dtypes attributes: {[a for a in dir(ml_dtypes) if 'float8' in a]}", flush=True)
+
+except Exception as e:
+    print(f"DEBUG: JAX/ml_dtypes setup failed: {e}", flush=True)
+    traceback.print_exc()
+
+import jax.numpy as jnp
+import numpy as np
 from PIL import Image
 import io
-from transformers import AutoModelForVision2Seq, AutoProcessor, BitsAndBytesConfig
-import os
+import cv2
 
-class OpenVLAModel:
-    def __init__(self, model_id="openvla/openvla-7b"):
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        print(f"Loading OpenVLA model (8-bit with CPU offload): {model_id}...", flush=True)
+# 遅延インポート
+OctoModel = None
 
-        # 8-bit 量子化と CPU オフロードの設定
-        # 8-bit は 4-bit よりも CPU オフロードの挙動が安定しています
-        quantization_config = BitsAndBytesConfig(
-            load_in_8bit=True,
-            llm_int8_enable_fp32_cpu_offload=True
-        )
+class OctoVLA:
+    def __init__(self, model_id="hf://rail-berkeley/octo-small-1.5"):
+        global OctoModel
+        if OctoModel is None:
+            try:
+                from octo.model.octo_model import OctoModel
+            except Exception as e:
+                print(f"Error during octo import: {e}", flush=True)
+                traceback.print_exc() # 詳細なエラー箇所を表示
+                raise e
 
-        # GPUメモリの使用制限 (RTX 4060 8GB 用の調整)
-        # 3.5GB はシステムで使用中のため、モデル用には 3.5GB 程度を割り当て、残りを CPU (RAM) へ逃がす
-        max_memory = {0: "3.5GiB", "cpu": "16GiB"}
-
+        print(f"Loading Official Octo model: {model_id}...", flush=True)
+        
         try:
-            print("Downloading/Loading processor...", flush=True)
-            self.processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
+            # 本家 Octo (JAX/Flax) のロード
+            self.model = OctoModel.load_pretrained(model_id)
+            self.rng = jax.random.PRNGKey(0)
             
-            # オフロード用のフォルダを作成
-            if not os.path.exists("offload"):
-                os.makedirs("offload")
-
-            print("Loading model (this will use both GPU and System RAM)...", flush=True)
-            self.model = AutoModelForVision2Seq.from_pretrained(
-                model_id,
-                quantization_config=quantization_config,
-                low_cpu_mem_usage=True,
-                trust_remote_code=True,
-                device_map="auto",
-                max_memory=max_memory,
-                offload_folder="offload"
-            )
-            print("Model loaded successfully using 8-bit and CPU offload.", flush=True)
-            if torch.cuda.is_available():
-                print(f"Current VRAM allocated: {torch.cuda.memory_allocated() / 1024**3:.2f} GB", flush=True)
+            print("Official Octo model loaded successfully.", flush=True)
 
         except Exception as e:
-            print(f"Error loading model: {e}", flush=True)
+            print(f"Error loading Octo model: {e}", flush=True)
             raise e
 
     def predict(self, image_bytes: bytes, instruction: str = "pick up the blue block"):
+        # 画像の読み込みとリサイズ (Octo は 224x224)
         image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-        prompt = f"In: {instruction}\nOut:"
-        inputs = self.processor(prompt, image, return_tensors="pt").to(self.device)
+        image_np = np.array(image)
+        image_np = cv2.resize(image_np, (224, 224))
         
-        # 8-bit モデルの計算精度に合わせて入力を Float16 にキャスト
-        for k, v in inputs.items():
-            if torch.is_floating_point(v):
-                inputs[k] = v.to(torch.float16)
+        # [batch, window, height, width, channels]
+        # JAX版 Octo は H, W, C の順を期待
+        img_input = image_np[None, None, ...] # (1, 1, 224, 224, 3)
         
-        with torch.no_grad():
-            # action: [dx, dy, dz, droll, dpitch, dyaw, gripper]
-            # **inputs とすることで、辞書の内容を引数として展開して渡します
-            action = self.model.predict_action(**inputs, unnorm_key="bridge_orig", do_sample=False)
+        observations = {
+            "image_primary": img_input
+        }
+        
+        # タスク（命令）の作成
+        task = self.model.create_tasks(texts=[instruction])
+        
+        # 推論実行 (JAX PRNG を使用)
+        self.rng, key = jax.random.split(self.rng)
+        
+        # actions: [batch, window, action_dim]
+        # Octo-Small は非常に高速
+        actions = self.model.sample_actions(observations, task, rng=key)
+        
+        # 最新のアクションを取得
+        # アクション形式: [dx, dy, dz, droll, dpitch, dyaw, gripper]
+        action = np.array(actions[0, 0]) 
         
         return action
 
-# シングルトン的にモデルを管理
+# シングルトン管理
 vla_model = None
 
 def get_model():
     global vla_model
     if vla_model is None:
-        vla_model = OpenVLAModel()
+        vla_model = OctoVLA()
     return vla_model
