@@ -51,27 +51,45 @@ function App() {
   const [cameraPos, setCameraPos] = useState<[number, number, number] | undefined>(undefined);
   const [isInferring, setIsInferring] = useState(false);
   const [isAutonomous, setIsAutonomous] = useState(false); 
+  const [vlaStatus, setVlaStatus] = useState<'loading' | 'ready' | 'error' | 'offline'>('loading');
   const [lastCaptureUrl, setLastCaptureUrl] = useState<string | null>(null);
   const [inferenceResult, setInferenceResult] = useState<any>(null);
   const [instruction, setInstruction] = useState("pick up the blue block");
 
-  // 自律モードの最新状態を保持するためのRef（クロージャ・非同期対策）
+  // バックエンドのヘルスチェック（ポーリング）
+  useEffect(() => {
+    const checkHealth = async () => {
+      try {
+        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+        const response = await fetch(`${backendUrl}/health`);
+        if (!response.ok) throw new Error();
+        const data = await response.json();
+        setVlaStatus(data.status);
+      } catch (e) {
+        setVlaStatus('offline');
+      }
+    };
+
+    checkHealth();
+    const interval = setInterval(checkHealth, 3000); // 3秒おきにチェック
+    return () => clearInterval(interval);
+  }, []);
+
   const isAutoRef = useRef(false);
 
   useEffect(() => {
     isAutoRef.current = isAutonomous;
-    if (isAutonomous && !isInferring) {
+    if (isAutonomous && !isInferring && vlaStatus === 'ready') {
       handleRunInference();
     }
-  }, [isAutonomous]);
+  }, [isAutonomous, vlaStatus]);
 
   const handleRunInference = async () => {
-    if (!isConnected || isInferring) return;
+    if (!isConnected || isInferring || vlaStatus !== 'ready') return;
     
     setIsInferring(true);
     setInferenceResult(null);
 
-    // 推論時は定点カメラに固定
     setCameraPos([1.2, 0.8, 1.2]); 
     await new Promise(resolve => setTimeout(resolve, 500));
 
@@ -91,7 +109,6 @@ function App() {
         return;
       }
 
-      // 自律モード中に停止ボタンが押された場合のみ中断
       if (isAutonomous && !isAutoRef.current) {
         setIsInferring(false);
         return;
@@ -119,7 +136,6 @@ function App() {
 
         const data = await response.json();
         
-        // 通信待ちの間に停止されていないかチェック（自律モード時のみ）
         if (isAutonomous && !isAutoRef.current) {
            setIsInferring(false);
            return;
@@ -138,7 +154,6 @@ function App() {
           y: data.yaw
         });
 
-        // 移動待機
         await new Promise(resolve => setTimeout(resolve, 1000));
         
         const finalCanvas = document.querySelector('canvas');
@@ -146,8 +161,7 @@ function App() {
           setLastCaptureUrl(finalCanvas.toDataURL('image/png'));
         }
 
-        // 自律モード継続中ならループ
-        if (isAutoRef.current) {
+        if (isAutoRef.current && vlaStatus === 'ready') {
           setTimeout(handleRunInference, 100);
         }
 
@@ -155,11 +169,30 @@ function App() {
         console.error('Inference failed:', error);
         setIsAutonomous(false);
         isAutoRef.current = false;
-        alert('推論に失敗しました');
       } finally {
         setIsInferring(false);
       }
     }, 'image/png');
+  };
+
+  const getStatusColor = () => {
+    switch(vlaStatus) {
+      case 'ready': return '#10b981';
+      case 'loading': return '#f59e0b';
+      case 'error':
+      case 'offline': return '#ef4444';
+      default: return '#6b7280';
+    }
+  };
+
+  const getStatusText = () => {
+    switch(vlaStatus) {
+      case 'ready': return 'VLA Backend: READY';
+      case 'loading': return 'VLA Backend: LOADING / WARMING UP...';
+      case 'error': return 'VLA Backend: ERROR';
+      case 'offline': return 'VLA Backend: OFFLINE';
+      default: return 'VLA Backend: UNKNOWN';
+    }
   };
 
   return (
@@ -170,8 +203,13 @@ function App() {
         <div className="app-container">
           <h1>VLA Simulator Control</h1>
 
-          <div className={`status ${isConnected ? 'connected' : 'disconnected'}`}>
-            {isConnected ? '● Connected to ROS 2' : '○ Disconnected'}
+          <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
+            <div className={`status ${isConnected ? 'connected' : 'disconnected'}`} style={{ flex: 1, margin: 0 }}>
+              {isConnected ? '● ROS 2: OK' : '○ ROS 2: DISCONNECTED'}
+            </div>
+            <div className="status" style={{ flex: 2, margin: 0, backgroundColor: 'rgba(0,0,0,0.4)', color: getStatusColor(), border: `1px solid ${getStatusColor()}` }}>
+              {getStatusText()}
+            </div>
           </div>
 
           <div style={{ marginBottom: '15px' }}>
@@ -181,13 +219,15 @@ function App() {
               value={instruction} 
               onChange={e => setInstruction(e.target.value)}
               placeholder="e.g. pick up the blue block"
+              disabled={vlaStatus !== 'ready'}
               style={{ 
                 width: '100%', 
                 padding: '8px', 
                 borderRadius: '4px', 
                 border: '1px solid #4b5563', 
                 backgroundColor: '#1f2937', 
-                color: 'white' 
+                color: 'white',
+                opacity: vlaStatus === 'ready' ? 1 : 0.5
               }}
             />
           </div>
@@ -196,23 +236,25 @@ function App() {
             <div style={{ display: 'flex', gap: '10px' }}>
               <button 
                 onClick={handleRunInference} 
-                disabled={!isConnected || isInferring || isAutonomous}
+                disabled={!isConnected || isInferring || isAutonomous || vlaStatus !== 'ready'}
                 style={{ 
                   flex: 2, 
-                  backgroundColor: (isInferring || isAutonomous) ? '#4b5563' : '#8b5cf6', 
-                  fontSize: '1.1rem'
+                  backgroundColor: (isInferring || isAutonomous || vlaStatus !== 'ready') ? '#4b5563' : '#8b5cf6', 
+                  fontSize: '1.1rem',
+                  opacity: vlaStatus === 'ready' ? 1 : 0.6
                 }}
               >
-                {isInferring ? 'Inferring...' : 'Run Single Inference'}
+                {vlaStatus === 'loading' ? 'Warming up...' : isInferring ? 'Inferring...' : 'Run Single Inference'}
               </button>
               <button 
                 onClick={() => setIsAutonomous(!isAutonomous)}
-                disabled={!isConnected}
+                disabled={!isConnected || vlaStatus !== 'ready'}
                 style={{ 
                   flex: 2, 
-                  backgroundColor: isAutonomous ? '#ef4444' : '#10b981', 
+                  backgroundColor: isAutonomous ? '#ef4444' : (vlaStatus === 'ready' ? '#10b981' : '#4b5563'), 
                   fontSize: '1.1rem',
-                  fontWeight: 'bold'
+                  fontWeight: 'bold',
+                  opacity: vlaStatus === 'ready' ? 1 : 0.6
                 }}
               >
                 {isAutonomous ? 'STOP AUTO' : 'START AUTO'}
@@ -307,7 +349,6 @@ function App() {
                 onChange={e => {
                   const percent = parseInt(e.target.value);
                   setTargetPos(prev => ({ ...prev, gripperPercent: percent }));
-                  // Octo spec: 0% = 閉(物理0.04), 100% = 開(物理0.0)
                   sendGripperCmd(0.04 * (1 - percent / 100));
                 }}
                 disabled={isAutonomous}

@@ -1,23 +1,24 @@
+import os
+import numpy as np
+import jax
+import asyncio
+from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
 from fastapi import FastAPI, File, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import time
-import os
-from datetime import datetime
 from vla_model import get_model
-import numpy as np
-import torch
 
 app = FastAPI(title="VLA Simulator Backend")
 
-# デバッグ用画像の保存設定
+# 環境変数
 SAVE_DEBUG_IMAGES = os.getenv("SAVE_DEBUG_IMAGES", "false").lower() == "true"
 DEBUG_DIR = "debug_images"
 
 if SAVE_DEBUG_IMAGES and not os.path.exists(DEBUG_DIR):
     os.makedirs(DEBUG_DIR)
 
-# CORS設定 (Vite Frontend からのアクセスを許可)
+# CORS設定
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -35,32 +36,45 @@ class PoseResponse(BaseModel):
     yaw: float
     gripper: float
 
-# モデルのロード状態
-model_ready = False
+# モデルの状態管理
+# loading: 初期化中, ready: 利用可能, error: 初期化失敗
+model_status = "loading"
+executor = ThreadPoolExecutor(max_workers=1)
+
+def initialize_model():
+    global model_status
+    print("Starting VLA model initialization (Background)...", flush=True)
+    try:
+        # get_model() 内で OctoVLA() が呼ばれ、その中で _warmup() も実行される
+        get_model()
+        model_status = "ready"
+        print("VLA model initialization and warm-up complete.", flush=True)
+    except Exception as e:
+        print(f"Failed to initialize VLA model: {e}", flush=True)
+        model_status = "error"
 
 @app.on_event("startup")
 async def startup_event():
-    global model_ready
-    # 起動時にモデルのロードを開始
-    print("Starting VLA model initialization...", flush=True)
-    try:
-        get_model()
-        model_ready = True
-        print("VLA model initialization complete.", flush=True)
-    except Exception as e:
-        print(f"Failed to initialize VLA model on startup: {e}", flush=True)
+    # サーバー起動を妨げないよう、バックグラウンドでロードを開始
+    loop = asyncio.get_event_loop()
+    loop.run_in_executor(executor, initialize_model)
 
 @app.get("/health")
 async def health():
+    try:
+        gpu_available = len(jax.devices("gpu")) > 0
+    except:
+        gpu_available = False
+        
     return {
-        "status": "ready" if model_ready else "loading",
-        "gpu_available": torch.cuda.is_available(),
-        "vram_gb": round(torch.cuda.memory_allocated() / 1024**3, 2) if torch.cuda.is_available() else 0
+        "status": model_status,
+        "gpu_available": gpu_available,
+        "backend": "jax"
     }
 
 @app.get("/")
 async def root():
-    return {"message": "VLA Backend is running"}
+    return {"message": "VLA Backend is running", "status": model_status}
 
 @app.post("/predict", response_model=PoseResponse)
 async def predict(
@@ -74,6 +88,14 @@ async def predict(
     current_yaw: float = Form(0.0),
     current_gripper: float = Form(0.0)
 ):
+    if model_status != "ready":
+        # 準備ができていない場合は現在地を返す
+        return PoseResponse(
+            x=current_x, y=current_y, z=current_z, 
+            roll=current_roll, pitch=current_pitch, yaw=current_yaw, 
+            gripper=current_gripper
+        )
+
     contents = await image.read()
     
     if SAVE_DEBUG_IMAGES:
@@ -82,32 +104,21 @@ async def predict(
             filepath = os.path.join(DEBUG_DIR, f"input_{timestamp}.png")
             with open(filepath, "wb") as f:
                 f.write(contents)
-            print(f"Saved debug image: {filepath}, Instruction: {instruction}")
         except Exception as e:
             print(f"Failed to save debug image: {e}")
 
-    # モデルの取得と推論
     try:
         model = get_model()
-        # action: [dx, dy, dz, droll, dpitch, dyaw, gripper]
         action = model.predict(contents, instruction)
         
-        print(f"Predicted action delta: {action}", flush=True)
-
-        # 現在の座標にモデルの出力を加算
-        # Octo の出力 (dx, dy, dz) はメートル単位の相対変化量
         target_x = current_x + action[0]
         target_y = current_y + action[1]
         target_z = current_z + action[2]
         
-        # 回転の変化量を加算 (ラジアン -> 度)
         target_roll = current_roll + np.degrees(action[3])
         target_pitch = current_pitch + np.degrees(action[4])
         target_yaw = current_yaw + np.degrees(action[5])
         
-        # グリッパーの状態 (0.0 - 1.0)
-        # モデルの出力をそのまま目標値として使用、または変化量として扱うかはデータセットに依存
-        # ここでは Octo (Bridge v2) の慣習に従い、0.0 (閉) - 1.0 (開) の絶対目標値として扱う
         target_gripper = action[6] 
 
         return PoseResponse(
@@ -121,7 +132,6 @@ async def predict(
         )
     except Exception as e:
         print(f"Inference error: {e}", flush=True)
-        # エラー時は現在地を維持
         return PoseResponse(
             x=current_x, y=current_y, z=current_z, 
             roll=current_roll, pitch=current_pitch, yaw=current_yaw, 
