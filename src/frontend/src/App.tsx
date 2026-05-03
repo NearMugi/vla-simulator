@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRos } from './hooks/useRos';
 import { SimulatorScene } from './components/SimulatorScene';
 
@@ -23,23 +23,19 @@ function App() {
   const { isConnected, sendTargetPose, sendGripperCmd, jointStates } = useRos();
 
   const [targetPos, setTargetPos] = useState({ x: 0.0, y: 0.5, z: 0.0, gripperPercent: 0 });
-  // 初期姿勢: 下向き(X軸で180度回転)をRoll=180として設定
   const [targetRPY, setTargetRPY] = useState({ r: 180, p: 0, y: 0 });
 
   // 200msのデバウンス処理
   useEffect(() => {
     if (!isConnected) return;
     const handler = setTimeout(() => {
-      // 度数法(degree)から弧度法(radian)に変換
       const rollRad = targetRPY.r * (Math.PI / 180);
       const pitchRad = targetRPY.p * (Math.PI / 180);
       const yawRad = targetRPY.y * (Math.PI / 180);
 
       const q = eulerToQuaternion(rollRad, pitchRad, yawRad);
       sendTargetPose(targetPos.x, targetPos.y, targetPos.z, q);
-      
-      // グリッパーの状態も同期送信
-      sendGripperCmd(0.04 * (targetPos.gripperPercent / 100));
+      sendGripperCmd(0.04 * (1 - targetPos.gripperPercent / 100));
     }, 200);
     return () => clearTimeout(handler);
   }, [targetPos, targetRPY, isConnected]);
@@ -54,40 +50,63 @@ function App() {
 
   const [cameraPos, setCameraPos] = useState<[number, number, number] | undefined>(undefined);
   const [isInferring, setIsInferring] = useState(false);
+  const [isAutonomous, setIsAutonomous] = useState(false); 
   const [lastCaptureUrl, setLastCaptureUrl] = useState<string | null>(null);
   const [inferenceResult, setInferenceResult] = useState<any>(null);
   const [instruction, setInstruction] = useState("pick up the blue block");
 
+  // 自律モードの最新状態を保持するためのRef（クロージャ・非同期対策）
+  const isAutoRef = useRef(false);
+
+  useEffect(() => {
+    isAutoRef.current = isAutonomous;
+    if (isAutonomous && !isInferring) {
+      handleRunInference();
+    }
+  }, [isAutonomous]);
+
   const handleRunInference = async () => {
     if (!isConnected || isInferring) return;
+    
     setIsInferring(true);
     setInferenceResult(null);
 
-    // 推論時は定点カメラに固定（モデルの学習条件に合わせるため）
+    // 推論時は定点カメラに固定
     setCameraPos([1.2, 0.8, 1.2]); 
-    
-    // カメラの移動とアームの静止を待つために少し長めに待機
     await new Promise(resolve => setTimeout(resolve, 500));
 
-    // 1. シミュレータのCanvasを取得して画像化
     const canvas = document.querySelector('canvas');
     if (!canvas) {
-      alert('Canvas not found');
       setIsInferring(false);
+      setIsAutonomous(false);
+      isAutoRef.current = false;
       return;
     }
 
-    // バックエンド送信用の画像を取得
     canvas.toBlob(async (blob) => {
       if (!blob) {
+        setIsInferring(false);
+        setIsAutonomous(false);
+        isAutoRef.current = false;
+        return;
+      }
+
+      // 自律モード中に停止ボタンが押された場合のみ中断
+      if (isAutonomous && !isAutoRef.current) {
         setIsInferring(false);
         return;
       }
 
-      // 2. バックエンドへ送信
       const formData = new FormData();
       formData.append('image', blob, 'screenshot.png');
       formData.append('instruction', instruction);
+      formData.append('current_x', targetPos.x.toString());
+      formData.append('current_y', targetPos.y.toString());
+      formData.append('current_z', targetPos.z.toString());
+      formData.append('current_roll', targetRPY.r.toString());
+      formData.append('current_pitch', targetRPY.p.toString());
+      formData.append('current_yaw', targetRPY.y.toString());
+      formData.append('current_gripper', (targetPos.gripperPercent / 100).toString());
 
       try {
         const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
@@ -99,15 +118,19 @@ function App() {
         if (!response.ok) throw new Error('Backend error');
 
         const data = await response.json();
-        console.log('VLA Prediction:', data);
-        setInferenceResult(data);
+        
+        // 通信待ちの間に停止されていないかチェック（自律モード時のみ）
+        if (isAutonomous && !isAutoRef.current) {
+           setIsInferring(false);
+           return;
+        }
 
-        // 3. 推論結果をUI状態に反映（これによりアームが移動を開始する）
+        setInferenceResult(data);
         setTargetPos({
           x: data.x,
           y: data.y,
           z: data.z,
-          gripperPercent: data.gripper
+          gripperPercent: data.gripper * 100
         });
         setTargetRPY({
           r: data.roll,
@@ -115,16 +138,23 @@ function App() {
           y: data.yaw
         });
 
-        // 4. アームの移動（ROS通信のデバウンス200ms + 通信・描画時間）を待機してからキャプチャ
-        // これにより、UIに表示される「Last Capture」と「Prediction」の座標が一致する
-        await new Promise(resolve => setTimeout(resolve, 800));
+        // 移動待機
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
         const finalCanvas = document.querySelector('canvas');
         if (finalCanvas) {
           setLastCaptureUrl(finalCanvas.toDataURL('image/png'));
         }
 
+        // 自律モード継続中ならループ
+        if (isAutoRef.current) {
+          setTimeout(handleRunInference, 100);
+        }
+
       } catch (error) {
         console.error('Inference failed:', error);
+        setIsAutonomous(false);
+        isAutoRef.current = false;
         alert('推論に失敗しました');
       } finally {
         setIsInferring(false);
@@ -134,10 +164,8 @@ function App() {
 
   return (
     <>
-      {/* 3Dシミュレータ画面（全画面） */}
       <SimulatorScene jointStates={jointStates} cameraPosition={cameraPos} />
 
-      {/* コントロールUI（オーバーレイ） */}
       <div className="ui-overlay" style={{ maxHeight: '100vh', overflowY: 'auto' }}>
         <div className="app-container">
           <h1>VLA Simulator Control</h1>
@@ -168,25 +196,36 @@ function App() {
             <div style={{ display: 'flex', gap: '10px' }}>
               <button 
                 onClick={handleRunInference} 
-                disabled={!isConnected || isInferring}
+                disabled={!isConnected || isInferring || isAutonomous}
                 style={{ 
                   flex: 2, 
-                  backgroundColor: isInferring ? '#4b5563' : '#8b5cf6', 
-                  fontSize: '1.1rem',
-                  position: 'relative'
+                  backgroundColor: (isInferring || isAutonomous) ? '#4b5563' : '#8b5cf6', 
+                  fontSize: '1.1rem'
                 }}
               >
-                {isInferring ? 'Inferring...' : 'Run VLA Inference'}
+                {isInferring ? 'Inferring...' : 'Run Single Inference'}
               </button>
               <button 
-                onClick={() => setCameraPos([1.2, 0.8, 1.2])}
-                style={{ flex: 1, backgroundColor: '#4b5563', fontSize: '0.9rem' }}
+                onClick={() => setIsAutonomous(!isAutonomous)}
+                disabled={!isConnected}
+                style={{ 
+                  flex: 2, 
+                  backgroundColor: isAutonomous ? '#ef4444' : '#10b981', 
+                  fontSize: '1.1rem',
+                  fontWeight: 'bold'
+                }}
               >
-                Snap View
+                {isAutonomous ? 'STOP AUTO' : 'START AUTO'}
               </button>
             </div>
+            
+            <button 
+              onClick={() => setCameraPos([1.2, 0.8, 1.2])}
+              style={{ backgroundColor: '#4b5563', fontSize: '0.9rem' }}
+            >
+              Reset Camera View
+            </button>
 
-            {/* キャプチャ画像と推論結果のプレビュー */}
             {(lastCaptureUrl || inferenceResult) && (
               <div style={{ 
                 display: 'flex', 
@@ -224,15 +263,15 @@ function App() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <label>
                 X: {targetPos.x.toFixed(2)}
-                <input type="range" min="-0.8" max="0.8" step="0.05" value={targetPos.x} onChange={e => handlePosChange('x', e.target.value)} style={{ width: '100%', marginLeft: '10px' }} />
+                <input type="range" min="-0.8" max="0.8" step="0.05" value={targetPos.x} onChange={e => handlePosChange('x', e.target.value)} style={{ width: '100%', marginLeft: '10px' }} disabled={isAutonomous} />
               </label>
               <label>
                 Y: {targetPos.y.toFixed(2)}
-                <input type="range" min="0.0" max="0.9" step="0.05" value={targetPos.y} onChange={e => handlePosChange('y', e.target.value)} style={{ width: '100%', marginLeft: '10px' }} />
+                <input type="range" min="0.0" max="0.9" step="0.05" value={targetPos.y} onChange={e => handlePosChange('y', e.target.value)} style={{ width: '100%', marginLeft: '10px' }} disabled={isAutonomous} />
               </label>
               <label>
                 Z: {targetPos.z.toFixed(2)}
-                <input type="range" min="-0.8" max="0.8" step="0.05" value={targetPos.z} onChange={e => handlePosChange('z', e.target.value)} style={{ width: '100%', marginLeft: '10px' }} />
+                <input type="range" min="-0.8" max="0.8" step="0.05" value={targetPos.z} onChange={e => handlePosChange('z', e.target.value)} style={{ width: '100%', marginLeft: '10px' }} disabled={isAutonomous} />
               </label>
             </div>
           </div>
@@ -242,37 +281,39 @@ function App() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <label>
                 Roll (X): {targetRPY.r.toFixed(0)}°
-                <input type="range" min="-180" max="180" step="5" value={targetRPY.r} onChange={e => handleRPYChange('r', e.target.value)} style={{ width: '100%', marginLeft: '10px' }} />
+                <input type="range" min="-180" max="180" step="5" value={targetRPY.r} onChange={e => handleRPYChange('r', e.target.value)} style={{ width: '100%', marginLeft: '10px' }} disabled={isAutonomous} />
               </label>
               <label>
                 Pitch (Y): {targetRPY.p.toFixed(0)}°
-                <input type="range" min="-180" max="180" step="5" value={targetRPY.p} onChange={e => handleRPYChange('p', e.target.value)} style={{ width: '100%', marginLeft: '10px' }} />
+                <input type="range" min="-180" max="180" step="5" value={targetRPY.p} onChange={e => handleRPYChange('p', e.target.value)} style={{ width: '100%', marginLeft: '10px' }} disabled={isAutonomous} />
               </label>
               <label>
                 Yaw (Z): {targetRPY.y.toFixed(0)}°
-                <input type="range" min="-180" max="180" step="5" value={targetRPY.y} onChange={e => handleRPYChange('y', e.target.value)} style={{ width: '100%', marginLeft: '10px' }} />
+                <input type="range" min="-180" max="180" step="5" value={targetRPY.y} onChange={e => handleRPYChange('y', e.target.value)} style={{ width: '100%', marginLeft: '10px' }} disabled={isAutonomous} />
               </label>
             </div>
           </div>
 
           <div style={{ marginTop: '20px' }}>
-            <h3>Gripper Control</h3>
+            <h3>Gripper Control (Octo Spec)</h3>
             <label>
-              Grip: {((targetPos as any).gripperPercent || 0)}%
+              Status: {targetPos.gripperPercent <= 10 ? 'CLOSED' : targetPos.gripperPercent >= 90 ? 'OPEN' : `${targetPos.gripperPercent.toFixed(0)}%`}
               <input
                 type="range"
                 min="0"
                 max="100"
                 step="1"
-                value={(targetPos as any).gripperPercent || 0}
+                value={targetPos.gripperPercent}
                 onChange={e => {
                   const percent = parseInt(e.target.value);
                   setTargetPos(prev => ({ ...prev, gripperPercent: percent }));
-                  // 0.04 (Closed) * percent / 100
-                  sendGripperCmd(0.04 * (percent / 100));
+                  // Octo spec: 0% = 閉(物理0.04), 100% = 開(物理0.0)
+                  sendGripperCmd(0.04 * (1 - percent / 100));
                 }}
+                disabled={isAutonomous}
                 style={{ width: '100%', marginLeft: '10px' }}
               />
+              <span style={{ fontSize: '0.7rem', opacity: 0.6 }}>0%: 閉 (Closed) / 100%: 開 (Open)</span>
             </label>
           </div>
         </div>
