@@ -43,5 +43,13 @@ services:
       - SAVE_DEBUG_IMAGES=true
       - TZ=Asia/Tokyo
     volumes:
+      - ./src/backend:/app
       - ./src/backend/debug_images:/app/debug_images
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
     restart: unless-stopped
