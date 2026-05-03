@@ -4,6 +4,7 @@ import sys
 # GPUメモリの競合を防ぐための設定
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 os.environ["TF_FORCE_GPU_ALLOW_GROWTH"] = "true"
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 import traceback
 
@@ -57,37 +58,58 @@ class OctoVLA:
             
             print("Official Octo model loaded successfully.", flush=True)
 
+            # ウォームアップ (JITコンパイルと言語モデルのロードを事前に行う)
+            self._warmup()
+
         except Exception as e:
             print(f"Error loading Octo model: {e}", flush=True)
             raise e
 
+    def _warmup(self):
+        print("Starting model warm-up (JIT compilation)...", flush=True)
+        try:
+            # ダミー画像（黒塗り）で一度推論を実行
+            dummy_image = np.zeros((256, 256, 3), dtype=np.uint8)
+            _, img_encoded = cv2.imencode(".png", dummy_image)
+            self.predict(img_encoded.tobytes(), "warmup")
+            print("Model warm-up complete.", flush=True)
+        except Exception as e:
+            print(f"Warm-up failed (non-fatal): {e}", flush=True)
+
     def predict(self, image_bytes: bytes, instruction: str = "pick up the blue block"):
-        # 画像の読み込みとリサイズ (Octo は 224x224)
+        # 画像の読み込みとリサイズ (Octo は 256x256 を期待)
         image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
         image_np = np.array(image)
-        image_np = cv2.resize(image_np, (224, 224))
+        image_np = cv2.resize(image_np, (256, 256))
         
         # [batch, window, height, width, channels]
-        # JAX版 Octo は H, W, C の順を期待
-        img_input = image_np[None, None, ...] # (1, 1, 224, 224, 3)
+        # モデルが window=2 を期待しているため、現在のフレームを2回重ねて入力
+        img_input = image_np[None, None, ...] # (1, 1, 256, 256, 3)
+        img_input = np.repeat(img_input, 2, axis=1) # (1, 2, 256, 256, 3)
         
         observations = {
-            "image_primary": img_input
+            "image_primary": img_input,
+            "image_wrist": np.zeros((1, 2, 128, 128, 3), dtype=np.uint8), # 手首カメラは 128x128 を期待
+            "timestep": np.array([[0, 1]], dtype=np.int32),
+            "timestep_pad_mask": np.array([[True, True]], dtype=bool),
+            "pad_mask_dict": {
+                "image_primary": np.array([[True, True]], dtype=bool),
+                "image_wrist": np.array([[False, False]], dtype=bool), # 手首は無効化
+                "timestep": np.array([[True, True]], dtype=bool),
+            }
         }
         
         # タスク（命令）の作成
         task = self.model.create_tasks(texts=[instruction])
         
-        # 推論実行 (JAX PRNG を使用)
+        # 推論実行
         self.rng, key = jax.random.split(self.rng)
         
         # actions: [batch, window, action_dim]
-        # Octo-Small は非常に高速
         actions = self.model.sample_actions(observations, task, rng=key)
         
-        # 最新のアクションを取得
-        # アクション形式: [dx, dy, dz, droll, dpitch, dyaw, gripper]
-        action = np.array(actions[0, 0]) 
+        # 最新のアクションを取得 (windowの最後のステップ)
+        action = np.array(actions[0, -1]) 
         
         return action
 
