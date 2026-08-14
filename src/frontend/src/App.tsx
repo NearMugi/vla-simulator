@@ -55,6 +55,77 @@ function App() {
   const [lastCaptureUrl, setLastCaptureUrl] = useState<string | null>(null);
   const [inferenceResult, setInferenceResult] = useState<any>(null);
   const [instruction, setInstruction] = useState("pick up the blue block");
+  
+  const [isRecording, setIsRecording] = useState(false);
+  const [episodeId, setEpisodeId] = useState<string | null>(null);
+  const [stepIndex, setStepIndex] = useState(0);
+  const stepIndexRef = useRef(0);
+
+  useEffect(() => {
+    stepIndexRef.current = stepIndex;
+  }, [stepIndex]);
+
+  const handleToggleRecording = () => {
+    if (isRecording) {
+      setIsRecording(false);
+    } else {
+      const now = new Date();
+      const id = `ep_${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+      setEpisodeId(id);
+      setStepIndex(0);
+      setIsRecording(true);
+    }
+  };
+
+  useEffect(() => {
+    let interval: any;
+    if (isRecording && episodeId) {
+      interval = setInterval(async () => {
+        await captureAndSaveStep();
+      }, 500);
+    } else {
+      setEpisodeId(null);
+    }
+    return () => clearInterval(interval);
+  }, [isRecording, episodeId]);
+
+  const captureAndSaveStep = async () => {
+    const currentEpisodeId = episodeId; // Capture value in closure
+    if (!currentEpisodeId) return;
+
+    const canvas = document.querySelector('canvas');
+    if (!canvas) return;
+
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+
+      const formData = new FormData();
+      formData.append('episode_id', currentEpisodeId);
+      formData.append('step_index', stepIndexRef.current.toString());
+      formData.append('image', blob, `step_${stepIndexRef.current}.png`);
+      formData.append('instruction', instruction);
+      formData.append('x', targetPos.x.toString());
+      formData.append('y', targetPos.y.toString());
+      formData.append('z', targetPos.z.toString());
+      formData.append('roll', targetRPY.r.toString());
+      formData.append('pitch', targetRPY.p.toString());
+      formData.append('yaw', targetRPY.y.toString());
+      formData.append('gripper', (targetPos.gripperPercent / 100).toString());
+
+      try {
+        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+        const response = await fetch(`${backendUrl}/save_step`, {
+          method: 'POST',
+          body: formData,
+        });
+        if (response.ok) {
+          setStepIndex(prev => prev + 1);
+        }
+      } catch (error) {
+        console.error('Failed to save step:', error);
+      }
+    }, 'image/png');
+  };
 
   // バックエンドのヘルスチェック（ポーリング）
   useEffect(() => {
@@ -261,6 +332,40 @@ function App() {
               </button>
             </div>
             
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button 
+                onClick={handleToggleRecording}
+                style={{ 
+                  flex: 1, 
+                  backgroundColor: isRecording ? '#ef4444' : '#10b981', 
+                  fontSize: '1rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px'
+                }}
+              >
+                {isRecording ? (
+                  <>
+                    <span className="record-blink" style={{ width: '12px', height: '12px', backgroundColor: 'white', borderRadius: '50%' }}></span>
+                    STOP RECORDING
+                  </>
+                ) : (
+                  <>
+                    <span style={{ width: '12px', height: '12px', backgroundColor: '#ef4444', borderRadius: '50%' }}></span>
+                    REC START
+                  </>
+                )}
+              </button>
+              {isRecording && (
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', fontSize: '0.75rem', color: '#ef4444', textAlign: 'left' }}>
+                  <div style={{ fontWeight: 'bold' }}>RECORDING...</div>
+                  <div style={{ opacity: 0.8 }}>ID: {episodeId}</div>
+                  <div style={{ opacity: 0.8 }}>Steps: {stepIndex}</div>
+                </div>
+              )}
+            </div>
+
             <button 
               onClick={() => setCameraPos([1.2, 0.8, 1.2])}
               style={{ backgroundColor: '#4b5563', fontSize: '0.9rem' }}

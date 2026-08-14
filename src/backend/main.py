@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from fastapi import FastAPI, File, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import json
 from vla_model import get_model
 
 app = FastAPI(title="VLA Simulator Backend")
@@ -17,6 +18,9 @@ DEBUG_DIR = "debug_images"
 
 if SAVE_DEBUG_IMAGES and not os.path.exists(DEBUG_DIR):
     os.makedirs(DEBUG_DIR)
+
+DATASETS_DIR = "datasets"
+os.makedirs(DATASETS_DIR, exist_ok=True)
 
 # CORS設定
 app.add_middleware(
@@ -137,6 +141,48 @@ async def predict(
             roll=current_roll, pitch=current_pitch, yaw=current_yaw, 
             gripper=current_gripper
         )
+
+@app.post("/save_step")
+async def save_step(
+    episode_id: str = Form(...),
+    step_index: int = Form(...),
+    image: UploadFile = File(...),
+    instruction: str = Form(...),
+    x: float = Form(...),
+    y: float = Form(...),
+    z: float = Form(...),
+    roll: float = Form(...),
+    pitch: float = Form(...),
+    yaw: float = Form(...),
+    gripper: float = Form(...)
+):
+    episode_dir = os.path.join(DATASETS_DIR, episode_id)
+    os.makedirs(episode_dir, exist_ok=True)
+    
+    # 画像の保存
+    image_filename = f"step_{step_index:03d}.png"
+    image_path = os.path.join(episode_dir, image_filename)
+    contents = await image.read()
+    with open(image_path, "wb") as f:
+        f.write(contents)
+        
+    # アクションデータの保存
+    metadata_filename = f"step_{step_index:03d}.json"
+    metadata_path = os.path.join(episode_dir, metadata_filename)
+    metadata = {
+        "step_index": step_index,
+        "instruction": instruction,
+        "pose": {
+            "x": x, "y": y, "z": z,
+            "roll": roll, "pitch": pitch, "yaw": yaw,
+            "gripper": gripper
+        },
+        "timestamp": datetime.now().isoformat()
+    }
+    with open(metadata_path, "w", encoding="utf-8") as f:
+        json.dump(metadata, f, indent=2, ensure_ascii=False)
+        
+    return {"status": "success", "episode_id": episode_id, "step_index": step_index}
 
 if __name__ == "__main__":
     import uvicorn

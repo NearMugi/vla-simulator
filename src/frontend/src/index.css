@@ -120,3 +120,13 @@ button:disabled {
   box-shadow: none;
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
+
+.record-blink {
+  animation: blink 1.5s infinite;
+}
+
+@keyframes blink {
+  0% { opacity: 1; }
+  50% { opacity: 0.2; }
+  100% { opacity: 1; }
+}
